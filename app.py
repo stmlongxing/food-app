@@ -172,6 +172,13 @@ def get_logs():
         result.append(d)
     return jsonify(result)
 
+@app.route('/api/logs/<int:log_id>', methods=['DELETE'])
+def delete_log(log_id):
+    """刪除單筆盤點或消耗歷史紀錄"""
+    with DBConn() as db:
+        db.execute("DELETE FROM audit_logs WHERE id = ?", (log_id,))
+    return jsonify({"success": True})
+
 @app.route('/api/items', methods=['POST'])
 def add_item():
     data = request.json or {}
