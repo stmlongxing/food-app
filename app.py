@@ -172,9 +172,27 @@ def get_logs():
         result.append(d)
     return jsonify(result)
 
+@app.route('/api/logs/<int:log_id>', methods=['PUT'])
+def update_log(log_id):
+    """修改單筆盤點紀錄"""
+    data = request.json or {}
+    actual_qty = int(data.get('actual_qty', 0))
+    audit_date = format_date_str(data.get('audit_date', ''))
+    auditor = data.get('auditor', '').strip()
+    notes = data.get('notes', '').strip()
+    action_type = 'completed' if actual_qty == 0 else 'audit'
+
+    with DBConn() as db:
+        db.execute("""
+            UPDATE audit_logs
+            SET actual_qty = ?, audit_date = ?, auditor = ?, notes = ?, action_type = ?
+            WHERE id = ?
+        """, (actual_qty, audit_date, auditor, notes, action_type, log_id))
+    return jsonify({"success": True})
+
 @app.route('/api/logs/<int:log_id>', methods=['DELETE'])
 def delete_log(log_id):
-    """刪除單筆盤點或消耗歷史紀錄"""
+    """刪除單筆歷史紀錄"""
     with DBConn() as db:
         db.execute("DELETE FROM audit_logs WHERE id = ?", (log_id,))
     return jsonify({"success": True})
