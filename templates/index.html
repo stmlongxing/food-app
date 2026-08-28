@@ -18,7 +18,6 @@
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft JhengHei", sans-serif; }
         body { background-color: var(--bg-page); color: var(--text-dark); min-height: 100vh; }
 
-        /* Top Header */
         header { background-color: var(--brand-green); color: #fff; padding: 14px 28px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
         .header-left { display: flex; align-items: center; gap: 14px; }
         .header-icon { font-size: 2.2rem; background: rgba(255,255,255,0.15); padding: 8px 12px; border-radius: 12px; }
@@ -32,7 +31,6 @@
 
         .container { max-width: 1240px; margin: 24px auto; padding: 0 16px; }
 
-        /* Summary Stat Cards */
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 24px; }
         .stat-card { background: #fff; border-radius: 14px; padding: 18px 22px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--card-border); box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
         .stat-label { font-size: 0.82rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
@@ -44,7 +42,6 @@
         .icon-yellow { background: #fffaf0; color: #dd6b20; }
         .icon-red { background: #fff5f5; color: #e53e3e; }
 
-        /* Form Section */
         .card { background: #fff; border-radius: 14px; border: 1px solid var(--card-border); padding: 22px; margin-bottom: 24px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
         .card-header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
         .card-title { font-size: 1.05rem; font-weight: 700; color: var(--brand-green); display: flex; align-items: center; gap: 8px; }
@@ -60,7 +57,6 @@
         .btn-submit { background: #00875a; color: #fff; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; font-size: 0.95rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; float: right; }
         .btn-submit:hover { opacity: 0.9; }
 
-        /* Tables & Tabs */
         .list-section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
         .list-title { font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
         .list-badge { background: #e6fffa; color: #234e52; font-size: 0.8rem; font-weight: 700; padding: 4px 10px; border-radius: 12px; border: 1px solid #b2f5ea; }
@@ -84,13 +80,11 @@
         .btn-icon-del { color: #e53e3e; }
         .btn-icon-del:hover { color: #9b2c2c; }
 
-        /* Tabs bottom */
         .tabs-header { display: flex; gap: 16px; border-bottom: 2px solid #edf2f7; margin-bottom: 16px; }
         .tab-btn { background: none; border: none; padding: 10px 14px; font-size: 0.92rem; font-weight: 700; color: var(--text-muted); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; display: flex; align-items: center; gap: 6px; }
         .tab-btn.active { color: var(--brand-green); border-bottom-color: var(--brand-green); }
         .tab-subtext { font-size: 0.78rem; color: #a0aec0; margin-left: auto; align-self: center; }
 
-        /* Modal */
         .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 1000; }
         .modal-box { background: #fff; border-radius: 14px; width: 90%; max-width: 520px; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); max-height: 90vh; overflow-y: auto; }
         .modal-title { font-size: 1.15rem; font-weight: 700; color: var(--brand-green); margin-bottom: 16px; }
@@ -175,7 +169,7 @@
             </div>
             <div class="form-group">
                 <label>單位<span class="req">*</span></label>
-                <input type="text" id="foodUnit" class="form-control" placeholder="包 / 罐 / 箱" value="包">
+                <input type="text" id="foodUnit" class="form-control" placeholder="請輸入單位，例：包、罐、盒">
             </div>
         </div>
 
@@ -322,7 +316,7 @@
             </div>
             <div class="form-group">
                 <label>單位 *</label>
-                <input type="text" id="editUnit" class="form-control">
+                <input type="text" id="editUnit" class="form-control" placeholder="例：包、罐、盒">
             </div>
         </div>
 
@@ -365,7 +359,6 @@
     let allLogs = [];
     let currentTab = 'audit';
 
-    // 嚴格日期清洗器 (防護 .000Z)
     function cleanDate(val) {
         if (!val) return '';
         const s = String(val).trim();
@@ -494,14 +487,14 @@
     async function submitNewItem() {
         const name = document.getElementById('foodName').value.trim();
         const qty = parseInt(document.getElementById('foodQty').value) || 0;
-        const unit = document.getElementById('foodUnit').value.trim() || '包';
+        const unit = document.getElementById('foodUnit').value.trim();
         const mfg = cleanDate(document.getElementById('mfgDate').value);
         const exp = cleanDate(document.getElementById('expDate').value);
         const inD = cleanDate(document.getElementById('inDate').value);
         const staff = document.getElementById('foodStaff').value.trim();
 
-        if (!name || qty <= 0 || !mfg || !exp || !inD || !staff) {
-            alert('請完整填寫所有標記 * 的必填欄位！');
+        if (!name || qty <= 0 || !unit || !mfg || !exp || !inD || !staff) {
+            alert('請完整填寫所有標記 * 的必填欄位（包含單位）！');
             return;
         }
 
@@ -513,6 +506,7 @@
 
         if (res.ok) {
             document.getElementById('foodName').value = '';
+            document.getElementById('foodUnit').value = '';
             document.getElementById('mfgDate').value = '';
             document.getElementById('expDate').value = '';
             loadData();
@@ -525,7 +519,7 @@
         const item = allItems.find(i => i.id === id);
         if (!item) return;
         document.getElementById('auditItemId').value = id;
-        document.getElementById('modalTitle').innerText = `盤點品項：${item.name} (原在庫 ${item.current_qty} ${item.unit})`;
+        document.getElementById('modalTitle').innerText = `盤點品項：${item.name} (原在庫 ${item.current_qty} ${item.unit || ''})`;
         document.getElementById('auditQty').value = item.current_qty;
         document.getElementById('auditDate').value = new Date().toISOString().split('T')[0];
         document.getElementById('auditor').value = '';
@@ -580,7 +574,6 @@
         }
     }
 
-    // 打開全欄位編輯彈窗
     function openEditModal(id) {
         const item = allItems.find(i => i.id === id);
         if (!item) return;
@@ -589,7 +582,7 @@
         document.getElementById('editName').value = item.name || '';
         document.getElementById('editInitQty').value = item.initial_qty || 1;
         document.getElementById('editCurQty').value = item.current_qty !== undefined ? item.current_qty : 1;
-        document.getElementById('editUnit').value = item.unit || '包';
+        document.getElementById('editUnit').value = item.unit || '';
         document.getElementById('editMfgDate').value = cleanDate(item.mfg_date);
         document.getElementById('editExpDate').value = cleanDate(item.exp_date);
         document.getElementById('editInDate').value = cleanDate(item.in_date);
@@ -599,21 +592,20 @@
         document.getElementById('editModal').style.display = 'flex';
     }
 
-    // 提交全欄位修改
     async function submitEditFullItem() {
         const id = document.getElementById('editItemId').value;
         const name = document.getElementById('editName').value.trim();
         const initQty = parseInt(document.getElementById('editInitQty').value) || 0;
         const curQty = parseInt(document.getElementById('editCurQty').value);
-        const unit = document.getElementById('editUnit').value.trim() || '包';
+        const unit = document.getElementById('editUnit').value.trim();
         const mfg = cleanDate(document.getElementById('editMfgDate').value);
         const exp = cleanDate(document.getElementById('editExpDate').value);
         const inD = cleanDate(document.getElementById('editInDate').value);
         const staff = document.getElementById('editStaff').value.trim();
         const notes = document.getElementById('editNotes').value.trim();
 
-        if (!name || isNaN(curQty)) {
-            alert('請至少填妥食品品名與目前庫存數量！');
+        if (!name || isNaN(curQty) || !unit) {
+            alert('請填妥食品品名、目前庫存數量及單位！');
             return;
         }
 
