@@ -113,7 +113,6 @@
 </header>
 
 <div class="container">
-    <!-- 4 大統計卡片 -->
     <div class="stats-grid">
         <div class="stat-card">
             <div>
@@ -223,7 +222,7 @@
                         <th>目前庫存</th>
                         <th>盤點人</th>
                         <th>說明備註</th>
-                        <th>操作</th>
+                        <th style="width: 80px;">操作</th>
                     </tr>
                 </thead>
                 <tbody id="inventoryTbody">
@@ -256,6 +255,7 @@
                         <th>盤點實存</th>
                         <th>盤點人員</th>
                         <th>說明備註</th>
+                        <th style="width: 80px;">操作</th>
                     </tr>
                 </thead>
                 <tbody id="logsTbody">
@@ -458,7 +458,7 @@
         tbody.innerHTML = '';
 
         if (targetLogs.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" style="color:#a0aec0; padding:24px;">尚無盤點紀錄</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="8" style="color:#a0aec0; padding:24px;">尚無紀錄</td></tr>`;
             return;
         }
 
@@ -472,6 +472,9 @@
                 <td class="badge-qty">${l.actual_qty}</td>
                 <td>${l.auditor || '-'}</td>
                 <td>${l.notes || '-'}</td>
+                <td>
+                    <button class="btn-icon btn-icon-del" title="刪除此筆紀錄" onclick="deleteLogItem(${l.id})"><i class="fa-regular fa-trash-can"></i></button>
+                </td>
             `;
             tbody.appendChild(tr);
         });
@@ -636,6 +639,12 @@
     async function deleteItem(id) {
         if (!confirm('確定要刪除這筆物資資料嗎？')) return;
         const res = await fetch(`/api/items/${id}`, { method: 'DELETE' });
+        if (res.ok) loadData();
+    }
+
+    async function deleteLogItem(id) {
+        if (!confirm('確定要刪除此筆盤點／消耗歷史紀錄嗎？')) return;
+        const res = await fetch(`/api/logs/${id}`, { method: 'DELETE' });
         if (res.ok) loadData();
     }
 
