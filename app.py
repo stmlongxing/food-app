@@ -174,7 +174,6 @@ def get_logs():
 
 @app.route('/api/logs/<int:log_id>', methods=['PUT'])
 def update_log(log_id):
-    """修改單筆盤點紀錄"""
     data = request.json or {}
     actual_qty = int(data.get('actual_qty', 0))
     audit_date = format_date_str(data.get('audit_date', ''))
@@ -192,7 +191,6 @@ def update_log(log_id):
 
 @app.route('/api/logs/<int:log_id>', methods=['DELETE'])
 def delete_log(log_id):
-    """刪除單筆歷史紀錄"""
     with DBConn() as db:
         db.execute("DELETE FROM audit_logs WHERE id = ?", (log_id,))
     return jsonify({"success": True})
@@ -323,16 +321,28 @@ def recognize_image():
 @app.route('/export')
 def export_excel():
     month = request.args.get('month', datetime.now().strftime("%Y-%m"))
+    
     with DBConn() as db:
-        cursor = db.execute("SELECT * FROM inventory ORDER BY id ASC")
+        # 取出所有在庫品項
+        cursor = db.execute("SELECT * FROM inventory WHERE status = 'active' OR current_qty > 0 ORDER BY id ASC")
         items = cursor.fetchall()
+        # 取出指定月份的所有盤點紀錄
+        cursor_logs = db.execute("SELECT * FROM audit_logs WHERE audit_date LIKE ? ORDER BY id DESC", (f"{month}%",))
+        month_logs = cursor_logs.fetchall()
+
+    # 整理該月份各品項最新的盤點紀錄
+    logs_by_item = {}
+    for log in month_logs:
+        i_id = log['item_id']
+        if i_id not in logs_by_item:
+            logs_by_item[i_id] = log
 
     wb = Workbook()
     ws = wb.active
     ws.title = "食品存放盤點表"
 
+    org_font = Font(name="微軟正黑體", size=11, bold=True, color="2E7D32")
     title_font = Font(name="微軟正黑體", size=14, bold=True)
-    org_font = Font(name="微軟正黑體", size=10, color="555555")
     header_font = Font(name="微軟正黑體", size=10, bold=True)
     body_font = Font(name="微軟正黑體", size=10)
 
@@ -344,20 +354,23 @@ def export_excel():
     center_align = Alignment(horizontal='center', vertical='center')
     left_align = Alignment(horizontal='left', vertical='center')
 
+    # 第 1 列：機構名稱在最上方
     ws.merge_cells("A1:K1")
-    ws["A1"] = f"食品物資存放盤點表 ({month})"
-    ws["A1"].font = title_font
+    ws["A1"] = "財團法人私立天主教中華聖母社會福利慈善事業基金會 附設嘉義縣私立隆興社區長照機構(團體家屋)"
+    ws["A1"].font = org_font
     ws["A1"].alignment = center_align
 
+    # 第 2 列：盤點表主題 (包含月份)
     ws.merge_cells("A2:K2")
-    ws["A2"] = "財團法人私立天主教中華聖母社會福利慈善事業基金會 附設嘉義縣私立隆興社區長照機構(團體家屋)"
-    ws["A2"].font = org_font
+    ws["A2"] = f"食品物資存放盤點表 ({month})"
+    ws["A2"].font = title_font
     ws["A2"].alignment = center_align
 
-    ws.row_dimensions[1].height = 28
-    ws.row_dimensions[2].height = 20
+    ws.row_dimensions[1].height = 24
+    ws.row_dimensions[2].height = 28
     ws.row_dimensions[3].height = 26
 
+    # 第 3 列：表頭
     headers = ["序號", "食品品名", "入庫數", "製造日期", "有效日期", "入庫日期", "入庫人員", "最近盤點日", "目前庫存", "盤點人", "說明備註"]
     ws.append(headers)
 
@@ -368,21 +381,34 @@ def export_excel():
         c.alignment = center_align
         c.border = thin_border
 
+    # 填入明細資料
     for idx, row in enumerate(items, 1):
         d = dict(row)
         mfg = format_date_str(d.get('mfg_date')) or '-'
         exp = format_date_str(d.get('exp_date')) or '-'
         in_d = format_date_str(d.get('in_date')) or '-'
-        last_audit = format_date_str(d.get('last_audit_date')) or '-'
-        
-        init_q = d.get('initial_qty', '-')
-        cur_q = d.get('current_qty', '-')
         unit = d.get('unit', '')
+
+        item_id = d.get('id')
+        init_q = d.get('initial_qty', '-')
+        
+        # 判斷當月是否有盤點紀錄，若當月尚未盤點則顯示 '-'
+        if item_id in logs_by_item:
+            log_item = logs_by_item[item_id]
+            last_audit = format_date_str(log_item.get('audit_date')) or '-'
+            cur_q = f"{log_item.get('actual_qty', 0)} {unit}".strip()
+            auditor = log_item.get('auditor', '') or '-'
+            notes = log_item.get('notes', '') or '-'
+        else:
+            last_audit = '-'
+            cur_q = f"{d.get('current_qty', '-')} {unit}".strip()
+            auditor = '-'
+            notes = '-'
 
         row_data = [
             idx, d.get('name', ''), f"{init_q} {unit}".strip(), mfg, exp, in_d,
-            d.get('staff', '') or '-', last_audit, f"{cur_q} {unit}".strip(),
-            d.get('auditor', '') or '-', d.get('notes', '') or '-'
+            d.get('staff', '') or '-', last_audit, cur_q,
+            auditor, notes
         ]
         ws.append(row_data)
 
