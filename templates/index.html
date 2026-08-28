@@ -57,19 +57,25 @@
         .btn-submit { background: #00875a; color: #fff; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; font-size: 0.95rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; float: right; }
         .btn-submit:hover { opacity: 0.9; }
 
-        .list-section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+        .list-section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
         .list-title { font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
-        .list-badge { background: #e6fffa; color: #234e52; font-size: 0.8rem; font-weight: 700; padding: 4px 10px; border-radius: 12px; border: 1px solid #b2f5ea; }
-        
+        .list-filters { display: flex; align-items: center; gap: 8px; }
+        .filter-btn { background: #edf2f7; border: 1px solid #cbd5e0; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; color: #4a5568; cursor: pointer; }
+        .filter-btn.active { background: var(--brand-green); color: #fff; border-color: var(--brand-green); }
+
         .table-responsive { overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
         th { background: #f7fafc; color: #4a5568; font-weight: 700; padding: 12px 10px; border-bottom: 2px solid #edf2f7; text-align: center; white-space: nowrap; }
         td { padding: 12px 10px; border-bottom: 1px solid #edf2f7; text-align: center; color: #2d3748; }
         tr:hover { background: #f8fafc; }
+        tr.row-unaudited { background: #fffaf5; }
 
         .item-name-link { font-weight: 700; color: #1a202c; text-decoration: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
         .item-name-link:hover { color: var(--brand-btn-green); text-decoration: underline; }
         
+        .badge-audit-yes { background: #dcfce7; color: #15803d; padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; margin-left: 6px; white-space: nowrap; }
+        .badge-audit-no { background: #fee2e2; color: #b91c1c; padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; margin-left: 6px; white-space: nowrap; border: 1px solid #fca5a5; }
+
         .badge-exp-warn { background: #feebc8; color: #7b341e; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; margin-left: 4px; }
         .badge-exp-danger { background: #fed7d7; color: #9b2c2c; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; margin-left: 4px; }
         .badge-qty { font-weight: 700; color: var(--brand-btn-green); }
@@ -106,7 +112,7 @@
         <div class="month-picker-wrap">
             <i class="fa-regular fa-calendar"></i>
             <span style="margin-left: 6px;">月份</span>
-            <input type="month" id="selectedMonth">
+            <input type="month" id="selectedMonth" onchange="renderDashboard()">
         </div>
         <button class="btn-excel" onclick="exportExcel()"><i class="fa-solid fa-file-excel"></i> 匯出 Excel</button>
     </div>
@@ -205,7 +211,11 @@
                     <i class="fa-solid fa-arrow-turn-down"></i> 點擊「<strong>食品品名</strong>」可進行每月盤點；品名或資料填錯可點右側「<i class="fa-regular fa-pen-to-square"></i> <strong>編輯</strong>」修改全部欄位
                 </span>
             </div>
-            <div class="list-badge" id="inStockBadge">在庫共 0 項</div>
+            <div class="list-filters">
+                <button class="filter-btn active" id="filterAll" onclick="setAuditFilter('all')">全部在庫 (<span id="countAll">0</span>)</button>
+                <button class="filter-btn" id="filterUnaudited" style="color:#b91c1c;" onclick="setAuditFilter('unaudited')">⚠️ 本月未盤點 (<span id="countUnaudited">0</span>)</button>
+                <button class="filter-btn" id="filterAudited" style="color:#15803d;" onclick="setAuditFilter('audited')">✓ 本月已盤 (<span id="countAudited">0</span>)</button>
+            </div>
         </div>
 
         <div class="table-responsive">
@@ -386,6 +396,7 @@
     let allItems = [];
     let allLogs = [];
     let currentTab = 'audit';
+    let currentAuditFilter = 'all';
 
     function cleanDate(val) {
         if (!val) return '';
@@ -405,6 +416,14 @@
         renderDashboard();
     }
 
+    function setAuditFilter(type) {
+        currentAuditFilter = type;
+        document.getElementById('filterAll').classList.toggle('active', type === 'all');
+        document.getElementById('filterUnaudited').classList.toggle('active', type === 'unaudited');
+        document.getElementById('filterAudited').classList.toggle('active', type === 'audited');
+        renderDashboard();
+    }
+
     function renderDashboard() {
         const activeItems = allItems.filter(i => i.status === 'active' && i.current_qty > 0);
         
@@ -413,7 +432,9 @@
         let expSoon = 0;
         let expired = 0;
         let auditedThisMonth = 0;
+        let unauditedThisMonth = 0;
 
+        // 計算各項狀態
         activeItems.forEach(i => {
             const exp = cleanDate(i.exp_date);
             if (exp) {
@@ -421,8 +442,12 @@
                 if (diffDays < 0) expired++;
                 else if (diffDays <= 30) expSoon++;
             }
-            if (i.last_audit_date && cleanDate(i.last_audit_date).startsWith(currentMonth)) {
+            
+            const isAudited = i.last_audit_date && cleanDate(i.last_audit_date).startsWith(currentMonth);
+            if (isAudited) {
                 auditedThisMonth++;
+            } else {
+                unauditedThisMonth++;
             }
         });
 
@@ -430,15 +455,26 @@
         document.getElementById('statAudited').innerHTML = `${auditedThisMonth}<span>項</span>`;
         document.getElementById('statExpSoon').innerHTML = `${expSoon}<span>項</span>`;
         document.getElementById('statExpired').innerHTML = `${expired}<span>項</span>`;
-        document.getElementById('inStockBadge').innerText = `在庫共 ${activeItems.length} 項`;
+        
+        document.getElementById('countAll').innerText = activeItems.length;
+        document.getElementById('countUnaudited').innerText = unauditedThisMonth;
+        document.getElementById('countAudited').innerText = auditedThisMonth;
+
+        // 依篩選條件過濾品項
+        let displayItems = activeItems;
+        if (currentAuditFilter === 'unaudited') {
+            displayItems = activeItems.filter(i => !i.last_audit_date || !cleanDate(i.last_audit_date).startsWith(currentMonth));
+        } else if (currentAuditFilter === 'audited') {
+            displayItems = activeItems.filter(i => i.last_audit_date && cleanDate(i.last_audit_date).startsWith(currentMonth));
+        }
 
         const tbody = document.getElementById('inventoryTbody');
         tbody.innerHTML = '';
 
-        if (activeItems.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="11" style="color:#a0aec0; padding:24px;">目前尚無在庫物資</td></tr>`;
+        if (displayItems.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="11" style="color:#a0aec0; padding:24px;">查無符合條件的物資</td></tr>`;
         } else {
-            activeItems.forEach(item => {
+            displayItems.forEach(item => {
                 const tr = document.createElement('tr');
                 const exp = cleanDate(item.exp_date);
                 let expBadge = '';
@@ -448,11 +484,21 @@
                     else if (diffDays <= 30) expBadge = `<span class="badge-exp-warn">即期</span>`;
                 }
 
+                const isAuditedThisMonth = item.last_audit_date && cleanDate(item.last_audit_date).startsWith(currentMonth);
+                const auditStatusBadge = isAuditedThisMonth 
+                    ? `<span class="badge-audit-yes"><i class="fa-solid fa-check"></i> 本月已盤</span>` 
+                    : `<span class="badge-audit-no"><i class="fa-solid fa-triangle-exclamation"></i> 本月未盤點</span>`;
+
+                if (!isAuditedThisMonth) {
+                    tr.classList.add('row-unaudited');
+                }
+
                 tr.innerHTML = `
                     <td style="text-align: left;">
                         <a class="item-name-link" onclick="openAuditModal(${item.id})">
                             <i class="fa-regular fa-clipboard" style="color: var(--brand-btn-green);"></i> ${item.name}
                         </a>
+                        ${auditStatusBadge}
                     </td>
                     <td>${item.initial_qty} ${item.unit || ''}</td>
                     <td>${cleanDate(item.mfg_date) || '-'}</td>
@@ -665,7 +711,6 @@
         }
     }
 
-    // 打開歷史紀錄編輯彈窗
     function openEditLogModal(id) {
         const log = allLogs.find(l => l.id === id);
         if (!log) return;
@@ -680,7 +725,6 @@
         document.getElementById('editLogModal').style.display = 'flex';
     }
 
-    // 提交歷史紀錄修改
     async function submitEditLog() {
         const id = document.getElementById('editLogId').value;
         const actualQty = parseInt(document.getElementById('editLogQty').value);
