@@ -273,7 +273,7 @@
         <input type="hidden" id="auditItemId">
         <div class="form-group" style="margin-bottom: 12px;">
             <label>盤點實存數量 *</label>
-            <input type="number" id="auditQty" class="form-control" min="0" value="0" oninput="checkZeroNotesPrompt()">
+            <input type="number" id="auditQty" class="form-control" min="0" value="0" oninput="checkZeroNotesPrompt('auditQty', 'modalNotesLabel')">
         </div>
         <div class="form-group" style="margin-bottom: 12px;">
             <label>盤點日期 *</label>
@@ -350,6 +350,34 @@
         <div class="modal-actions">
             <button class="btn-cancel" onclick="closeModal('editModal')">取消</button>
             <button class="btn-submit" style="float: none;" onclick="submitEditFullItem()">儲存修改</button>
+        </div>
+    </div>
+</div>
+
+<!-- 歷史紀錄編輯 Modal -->
+<div class="modal-overlay" id="editLogModal">
+    <div class="modal-box">
+        <div class="modal-title" id="editLogTitle"><i class="fa-regular fa-pen-to-square"></i> 修改盤點紀錄</div>
+        <input type="hidden" id="editLogId">
+        <div class="form-group" style="margin-bottom: 12px;">
+            <label>盤點實存數量 *</label>
+            <input type="number" id="editLogQty" class="form-control" min="0" value="0" oninput="checkZeroNotesPrompt('editLogQty', 'editLogNotesLabel')">
+        </div>
+        <div class="form-group" style="margin-bottom: 12px;">
+            <label>盤點日期 *</label>
+            <input type="date" id="editLogDate" class="form-control">
+        </div>
+        <div class="form-group" style="margin-bottom: 12px;">
+            <label>盤點人員簽章 *</label>
+            <input type="text" id="editLogAuditor" class="form-control" placeholder="填寫盤點人員">
+        </div>
+        <div class="form-group" style="margin-bottom: 12px;">
+            <label id="editLogNotesLabel">說明備註</label>
+            <input type="text" id="editLogNotes" class="form-control" placeholder="如：無異常、已開封使用、已食用完畢等">
+        </div>
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeModal('editLogModal')">取消</button>
+            <button class="btn-submit" style="float: none;" onclick="submitEditLog()">儲存修改</button>
         </div>
     </div>
 </div>
@@ -473,6 +501,7 @@
                 <td>${l.auditor || '-'}</td>
                 <td>${l.notes || '-'}</td>
                 <td>
+                    <button class="btn-icon btn-icon-edit" title="修改此紀錄" onclick="openEditLogModal(${l.id})"><i class="fa-regular fa-pen-to-square"></i></button>
                     <button class="btn-icon btn-icon-del" title="刪除此筆紀錄" onclick="deleteLogItem(${l.id})"><i class="fa-regular fa-trash-can"></i></button>
                 </td>
             `;
@@ -527,13 +556,13 @@
         document.getElementById('auditDate').value = new Date().toISOString().split('T')[0];
         document.getElementById('auditor').value = '';
         document.getElementById('auditNotes').value = '';
-        checkZeroNotesPrompt();
+        checkZeroNotesPrompt('auditQty', 'modalNotesLabel');
         document.getElementById('auditModal').style.display = 'flex';
     }
 
-    function checkZeroNotesPrompt() {
-        const qty = parseInt(document.getElementById('auditQty').value);
-        const label = document.getElementById('modalNotesLabel');
+    function checkZeroNotesPrompt(qtyInputId, labelId) {
+        const qty = parseInt(document.getElementById(qtyInputId).value);
+        const label = document.getElementById(labelId);
         if (qty === 0) {
             label.innerHTML = `說明備註 <span style="color:#e53e3e; font-weight:700;">* (數量為 0 必填原因)</span>`;
         } else {
@@ -630,6 +659,54 @@
 
         if (res.ok) {
             closeModal('editModal');
+            loadData();
+        } else {
+            alert('修改失敗，請重試！');
+        }
+    }
+
+    // 打開歷史紀錄編輯彈窗
+    function openEditLogModal(id) {
+        const log = allLogs.find(l => l.id === id);
+        if (!log) return;
+
+        document.getElementById('editLogId').value = log.id;
+        document.getElementById('editLogTitle').innerHTML = `<i class="fa-regular fa-pen-to-square"></i> 修改盤點紀錄：${log.name}`;
+        document.getElementById('editLogQty').value = log.actual_qty;
+        document.getElementById('editLogDate').value = cleanDate(log.audit_date);
+        document.getElementById('editLogAuditor').value = log.auditor || '';
+        document.getElementById('editLogNotes').value = log.notes || '';
+        checkZeroNotesPrompt('editLogQty', 'editLogNotesLabel');
+        document.getElementById('editLogModal').style.display = 'flex';
+    }
+
+    // 提交歷史紀錄修改
+    async function submitEditLog() {
+        const id = document.getElementById('editLogId').value;
+        const actualQty = parseInt(document.getElementById('editLogQty').value);
+        const auditDate = cleanDate(document.getElementById('editLogDate').value);
+        const auditor = document.getElementById('editLogAuditor').value.trim();
+        const notes = document.getElementById('editLogNotes').value.trim();
+
+        if (isNaN(actualQty) || !auditDate || !auditor) {
+            alert('請填妥實存數量、盤點日期與盤點人員！');
+            return;
+        }
+
+        if (actualQty === 0 && !notes) {
+            alert('⚠️ 數量為 0 時，必須填寫「說明備註」！');
+            document.getElementById('editLogNotes').focus();
+            return;
+        }
+
+        const res = await fetch(`/api/logs/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actual_qty: actualQty, audit_date: auditDate, auditor, notes })
+        });
+
+        if (res.ok) {
+            closeModal('editLogModal');
             loadData();
         } else {
             alert('修改失敗，請重試！');
