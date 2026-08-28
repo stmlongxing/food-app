@@ -92,7 +92,7 @@
 
         /* Modal */
         .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 1000; }
-        .modal-box { background: #fff; border-radius: 14px; width: 90%; max-width: 480px; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
+        .modal-box { background: #fff; border-radius: 14px; width: 90%; max-width: 520px; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); max-height: 90vh; overflow-y: auto; }
         .modal-title { font-size: 1.15rem; font-weight: 700; color: var(--brand-green); margin-bottom: 16px; }
         .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
         .btn-cancel { background: #edf2f7; color: #4a5568; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; }
@@ -209,7 +209,7 @@
             <div class="list-title">
                 <span style="color: #38a169;">●</span> 現在在庫物資清單
                 <span style="font-size: 0.8rem; color: #718096; font-weight: normal; margin-left: 10px;">
-                    <i class="fa-solid fa-arrow-turn-down"></i> 點擊「<strong>食品品名</strong>」可進行每月盤點；品名填錯可點右側「<i class="fa-regular fa-pen-to-square"></i> <strong>編輯</strong>」修改
+                    <i class="fa-solid fa-arrow-turn-down"></i> 點擊「<strong>食品品名</strong>」可進行每月盤點；品名或資料填錯可點右側「<i class="fa-regular fa-pen-to-square"></i> <strong>編輯</strong>」修改全部欄位
                 </span>
             </div>
             <div class="list-badge" id="inStockBadge">在庫共 0 項</div>
@@ -294,8 +294,68 @@
             <input type="text" id="auditNotes" class="form-control" placeholder="如：無異常、已開封使用、已食用完畢等">
         </div>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="closeModal()">取消</button>
+            <button class="btn-cancel" onclick="closeModal('auditModal')">取消</button>
             <button class="btn-submit" style="float: none;" onclick="submitAudit()">完成盤點存檔</button>
+        </div>
+    </div>
+</div>
+
+<!-- 全欄位完整編輯 Modal -->
+<div class="modal-overlay" id="editModal">
+    <div class="modal-box">
+        <div class="modal-title"><i class="fa-regular fa-pen-to-square"></i> 修改食品物資全部資料</div>
+        <input type="hidden" id="editItemId">
+        
+        <div class="form-group" style="margin-bottom: 12px;">
+            <label>食品品名 *</label>
+            <input type="text" id="editName" class="form-control">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+            <div class="form-group">
+                <label>入庫數量 *</label>
+                <input type="number" id="editInitQty" class="form-control" min="1">
+            </div>
+            <div class="form-group">
+                <label>目前庫存 *</label>
+                <input type="number" id="editCurQty" class="form-control" min="0">
+            </div>
+            <div class="form-group">
+                <label>單位 *</label>
+                <input type="text" id="editUnit" class="form-control">
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+            <div class="form-group">
+                <label>製造日期</label>
+                <input type="date" id="editMfgDate" class="form-control">
+            </div>
+            <div class="form-group">
+                <label>有效日期</label>
+                <input type="date" id="editExpDate" class="form-control">
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+            <div class="form-group">
+                <label>入庫日期</label>
+                <input type="date" id="editInDate" class="form-control">
+            </div>
+            <div class="form-group">
+                <label>入庫人員簽章</label>
+                <input type="text" id="editStaff" class="form-control">
+            </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 12px;">
+            <label>說明備註</label>
+            <input type="text" id="editNotes" class="form-control" placeholder="備註說明">
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeModal('editModal')">取消</button>
+            <button class="btn-submit" style="float: none;" onclick="submitEditFullItem()">儲存修改</button>
         </div>
     </div>
 </div>
@@ -327,7 +387,6 @@
     function renderDashboard() {
         const activeItems = allItems.filter(i => i.status === 'active' && i.current_qty > 0);
         
-        // 統計卡片計算
         const today = new Date().toISOString().split('T')[0];
         const currentMonth = document.getElementById('selectedMonth').value;
         let expSoon = 0;
@@ -352,7 +411,6 @@
         document.getElementById('statExpired').innerHTML = `${expired}<span>項</span>`;
         document.getElementById('inStockBadge').innerText = `在庫共 ${activeItems.length} 項`;
 
-        // 渲染在庫表格
         const tbody = document.getElementById('inventoryTbody');
         tbody.innerHTML = '';
 
@@ -385,7 +443,7 @@
                     <td>${item.auditor || '-'}</td>
                     <td>${item.notes || '-'}</td>
                     <td>
-                        <button class="btn-icon btn-icon-edit" title="編輯" onclick="editItemPrompt(${item.id})"><i class="fa-regular fa-pen-to-square"></i></button>
+                        <button class="btn-icon btn-icon-edit" title="編輯全部欄位" onclick="openEditModal(${item.id})"><i class="fa-regular fa-pen-to-square"></i></button>
                         <button class="btn-icon btn-icon-del" title="刪除" onclick="deleteItem(${item.id})"><i class="fa-regular fa-trash-can"></i></button>
                     </td>
                 `;
@@ -486,8 +544,8 @@
         }
     }
 
-    function closeModal() {
-        document.getElementById('auditModal').style.display = 'none';
+    function closeModal(modalId) {
+        document.getElementById(modalId).style.display = 'none';
     }
 
     async function submitAudit() {
@@ -502,7 +560,6 @@
             return;
         }
 
-        // 當實存數量為 0 時，強制必須填寫備註
         if (actualQty === 0 && !notes) {
             alert('⚠️ 盤點數量為 0 時，必須填寫「說明備註」（例如：已食用完畢、已過期報廢等）！');
             document.getElementById('auditNotes').focus();
@@ -516,24 +573,71 @@
         });
 
         if (res.ok) {
-            closeModal();
+            closeModal('auditModal');
             loadData();
         } else {
             alert('盤點失敗');
         }
     }
 
-    async function editItemPrompt(id) {
+    // 打開全欄位編輯彈窗
+    function openEditModal(id) {
         const item = allItems.find(i => i.id === id);
         if (!item) return;
-        const newName = prompt('修改食品品名：', item.name);
-        if (newName && newName.trim() !== '') {
-            await fetch(`/api/items/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...item, name: newName.trim() })
-            });
+
+        document.getElementById('editItemId').value = item.id;
+        document.getElementById('editName').value = item.name || '';
+        document.getElementById('editInitQty').value = item.initial_qty || 1;
+        document.getElementById('editCurQty').value = item.current_qty !== undefined ? item.current_qty : 1;
+        document.getElementById('editUnit').value = item.unit || '包';
+        document.getElementById('editMfgDate').value = cleanDate(item.mfg_date);
+        document.getElementById('editExpDate').value = cleanDate(item.exp_date);
+        document.getElementById('editInDate').value = cleanDate(item.in_date);
+        document.getElementById('editStaff').value = item.staff || '';
+        document.getElementById('editNotes').value = item.notes || '';
+
+        document.getElementById('editModal').style.display = 'flex';
+    }
+
+    // 提交全欄位修改
+    async function submitEditFullItem() {
+        const id = document.getElementById('editItemId').value;
+        const name = document.getElementById('editName').value.trim();
+        const initQty = parseInt(document.getElementById('editInitQty').value) || 0;
+        const curQty = parseInt(document.getElementById('editCurQty').value);
+        const unit = document.getElementById('editUnit').value.trim() || '包';
+        const mfg = cleanDate(document.getElementById('editMfgDate').value);
+        const exp = cleanDate(document.getElementById('editExpDate').value);
+        const inD = cleanDate(document.getElementById('editInDate').value);
+        const staff = document.getElementById('editStaff').value.trim();
+        const notes = document.getElementById('editNotes').value.trim();
+
+        if (!name || isNaN(curQty)) {
+            alert('請至少填妥食品品名與目前庫存數量！');
+            return;
+        }
+
+        const res = await fetch(`/api/items/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: name,
+                initial_qty: initQty,
+                current_qty: curQty,
+                unit: unit,
+                mfg_date: mfg,
+                exp_date: exp,
+                in_date: inD,
+                staff: staff,
+                notes: notes
+            })
+        });
+
+        if (res.ok) {
+            closeModal('editModal');
             loadData();
+        } else {
+            alert('修改失敗，請重試！');
         }
     }
 
