@@ -98,6 +98,17 @@ def init_db():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
+            # 自動同步歷史舊紀錄品名與入庫日
+            try:
+                db.execute("""
+                    UPDATE audit_logs
+                    SET name = inventory.name,
+                        in_date = inventory.in_date
+                    FROM inventory
+                    WHERE audit_logs.item_id = inventory.id;
+                """)
+            except Exception:
+                pass
         else:
             db.execute("""
                 CREATE TABLE IF NOT EXISTS inventory (
@@ -119,7 +130,7 @@ def init_db():
             """)
             db.execute("""
                 CREATE TABLE IF NOT EXISTS audit_logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id SERIAL PRIMARY KEY,
                     item_id INTEGER,
                     name TEXT,
                     initial_qty INTEGER,
@@ -132,6 +143,16 @@ def init_db():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
+            # SQLite 同步歷史舊紀錄品名
+            try:
+                db.execute("""
+                    UPDATE audit_logs
+                    SET name = (SELECT name FROM inventory WHERE inventory.id = audit_logs.item_id),
+                        in_date = (SELECT in_date FROM inventory WHERE inventory.id = audit_logs.item_id)
+                    WHERE item_id IN (SELECT id FROM inventory);
+                """)
+            except Exception:
+                pass
 
 try:
     init_db()
@@ -219,23 +240,31 @@ def add_item():
 @app.route('/api/items/<int:item_id>', methods=['PUT'])
 def update_item(item_id):
     data = request.json or {}
+    name = data.get('name', '').strip()
+    init_qty = int(data.get('initial_qty', 0))
+    cur_qty = int(data.get('current_qty', 0))
+    unit = data.get('unit', '罐').strip()
+    mfg_date = format_date_str(data.get('mfg_date', ''))
+    exp_date = format_date_str(data.get('exp_date', ''))
+    in_date = format_date_str(data.get('in_date', ''))
+    staff = data.get('staff', '').strip()
+    notes = data.get('notes', '')
+
     with DBConn() as db:
+        # 1. 更新主庫存表
         db.execute("""
             UPDATE inventory
             SET name = ?, initial_qty = ?, current_qty = ?, unit = ?, mfg_date = ?, exp_date = ?, in_date = ?, staff = ?, notes = ?
             WHERE id = ?
-        """, (
-            data.get('name', '').strip(),
-            int(data.get('initial_qty', 0)),
-            int(data.get('current_qty', 0)),
-            data.get('unit', '罐'),
-            format_date_str(data.get('mfg_date', '')),
-            format_date_str(data.get('exp_date', '')),
-            format_date_str(data.get('in_date', '')),
-            data.get('staff', '').strip(),
-            data.get('notes', ''),
-            item_id
-        ))
+        """, (name, init_qty, cur_qty, unit, mfg_date, exp_date, in_date, staff, notes, item_id))
+
+        # 2. 同步更新過去所有盤點紀錄的品名與入庫日
+        db.execute("""
+            UPDATE audit_logs
+            SET name = ?, in_date = ?
+            WHERE item_id = ?
+        """, (name, in_date, item_id))
+
     return jsonify({"success": True})
 
 @app.route('/api/audit/<int:item_id>', methods=['POST'])
@@ -323,14 +352,11 @@ def export_excel():
     month = request.args.get('month', datetime.now().strftime("%Y-%m"))
     
     with DBConn() as db:
-        # 取出所有在庫品項
         cursor = db.execute("SELECT * FROM inventory WHERE status = 'active' OR current_qty > 0 ORDER BY id ASC")
         items = cursor.fetchall()
-        # 取出指定月份的所有盤點紀錄
         cursor_logs = db.execute("SELECT * FROM audit_logs WHERE audit_date LIKE ? ORDER BY id DESC", (f"{month}%",))
         month_logs = cursor_logs.fetchall()
 
-    # 整理該月份各品項最新的盤點紀錄
     logs_by_item = {}
     for log in month_logs:
         i_id = log['item_id']
@@ -354,13 +380,13 @@ def export_excel():
     center_align = Alignment(horizontal='center', vertical='center')
     left_align = Alignment(horizontal='left', vertical='center')
 
-    # 第 1 列：機構名稱在最上方
+    # 第 1 列：機構全銜在最上方
     ws.merge_cells("A1:K1")
     ws["A1"] = "財團法人私立天主教中華聖母社會福利慈善事業基金會 附設嘉義縣私立隆興社區長照機構(團體家屋)"
     ws["A1"].font = org_font
     ws["A1"].alignment = center_align
 
-    # 第 2 列：盤點表主題 (包含月份)
+    # 第 2 列：盤點表主題
     ws.merge_cells("A2:K2")
     ws["A2"] = f"食品物資存放盤點表 ({month})"
     ws["A2"].font = title_font
@@ -381,7 +407,7 @@ def export_excel():
         c.alignment = center_align
         c.border = thin_border
 
-    # 填入明細資料
+    # 填入資料明細
     for idx, row in enumerate(items, 1):
         d = dict(row)
         mfg = format_date_str(d.get('mfg_date')) or '-'
@@ -392,7 +418,7 @@ def export_excel():
         item_id = d.get('id')
         init_q = d.get('initial_qty', '-')
         
-        # 判斷當月是否有盤點紀錄，若當月尚未盤點則顯示 '-'
+        # 僅當月盤點紀錄才帶出盤點資訊，否則顯示 '-'
         if item_id in logs_by_item:
             log_item = logs_by_item[item_id]
             last_audit = format_date_str(log_item.get('audit_date')) or '-'
