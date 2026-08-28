@@ -1,6 +1,6 @@
-Flask
-gunicorn
+Flask>=3.0.0
+gunicorn>=21.2.0
+openpyxl>=3.1.0
+pandas>=2.0.0
 google-genai
-gspread
-google-auth
-Pillow
+requests>=2.31.0
