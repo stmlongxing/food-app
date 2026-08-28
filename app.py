@@ -36,7 +36,7 @@ def init_db():
     conn = get_db()
     cursor = conn.cursor()
     
-    # 庫存主表
+    # 建立主表
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS inventory (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,7 +56,7 @@ def init_db():
         )
     """)
 
-    # 盤點與消耗歷史表
+    # 建立歷史表
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS audit_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,7 +74,37 @@ def init_db():
     """)
     conn.commit()
 
-    # 自動清洗現有歷史舊日期中的時間尾巴
+    # 自動升級舊資料庫結構（若缺少新欄位則自動補齊）
+    cursor.execute("PRAGMA table_info(inventory)")
+    columns = [row['name'] for row in cursor.fetchall()]
+    
+    missing_cols = {
+        'initial_qty': 'INTEGER DEFAULT 0',
+        'current_qty': 'INTEGER DEFAULT 0',
+        'unit': "TEXT DEFAULT '包'",
+        'staff': 'TEXT',
+        'last_audit_date': 'TEXT',
+        'auditor': 'TEXT',
+        'notes': 'TEXT',
+        'status': "TEXT DEFAULT 'active'"
+    }
+
+    for col_name, col_type in missing_cols.items():
+        if col_name not in columns:
+            try:
+                cursor.execute(f"ALTER TABLE inventory ADD COLUMN {col_name} {col_type}")
+            except Exception as e:
+                print(f"Add column {col_name} notice:", e)
+
+    # 若舊資料有 quantity 但沒有 current_qty，將其同步
+    if 'quantity' in columns:
+        try:
+            cursor.execute("UPDATE inventory SET initial_qty = quantity WHERE initial_qty = 0 OR initial_qty IS NULL")
+            cursor.execute("UPDATE inventory SET current_qty = quantity WHERE current_qty = 0 OR current_qty IS NULL")
+        except Exception:
+            pass
+
+    # 清洗歷史舊日期
     try:
         cursor.execute("UPDATE inventory SET mfg_date = SUBSTR(mfg_date, 1, 10) WHERE mfg_date LIKE '%T%'")
         cursor.execute("UPDATE inventory SET exp_date = SUBSTR(exp_date, 1, 10) WHERE exp_date LIKE '%T%'")
@@ -82,11 +112,11 @@ def init_db():
         cursor.execute("UPDATE inventory SET last_audit_date = SUBSTR(last_audit_date, 1, 10) WHERE last_audit_date LIKE '%T%'")
         cursor.execute("UPDATE audit_logs SET in_date = SUBSTR(in_date, 1, 10) WHERE in_date LIKE '%T%'")
         cursor.execute("UPDATE audit_logs SET audit_date = SUBSTR(audit_date, 1, 10) WHERE audit_date LIKE '%T%'")
-        conn.commit()
     except Exception as e:
-        print("Date sanitize error:", e)
-    finally:
-        conn.close()
+        print("Date sanitize notice:", e)
+
+    conn.commit()
+    conn.close()
 
 init_db()
 
@@ -106,6 +136,11 @@ def get_items():
         d['exp_date'] = format_date_str(d.get('exp_date'))
         d['in_date'] = format_date_str(d.get('in_date'))
         d['last_audit_date'] = format_date_str(d.get('last_audit_date'))
+        # 兼容舊欄位
+        if d.get('current_qty') is None and d.get('quantity') is not None:
+            d['current_qty'] = d.get('quantity')
+        if d.get('initial_qty') is None and d.get('quantity') is not None:
+            d['initial_qty'] = d.get('quantity')
         result.append(d)
     return jsonify(result)
 
@@ -173,37 +208,45 @@ def update_item(item_id):
 
 @app.route('/api/audit/<int:item_id>', methods=['POST'])
 def audit_item(item_id):
-    data = request.json or {}
-    actual_qty = int(data.get('actual_qty', 0))
-    auditor = data.get('auditor', '').strip()
-    audit_date = format_date_str(data.get('audit_date', datetime.now().strftime('%Y-%m-%d')))
-    notes = data.get('notes', '')
+    try:
+        data = request.json or {}
+        actual_qty = int(data.get('actual_qty', 0))
+        auditor = data.get('auditor', '').strip()
+        audit_date = format_date_str(data.get('audit_date', datetime.now().strftime('%Y-%m-%d')))
+        notes = data.get('notes', '')
 
-    conn = get_db()
-    cursor = conn.cursor()
-    item = cursor.execute("SELECT * FROM inventory WHERE id = ?", (item_id,)).fetchone()
-    if not item:
+        conn = get_db()
+        cursor = conn.cursor()
+        item = cursor.execute("SELECT * FROM inventory WHERE id = ?", (item_id,)).fetchone()
+        if not item:
+            conn.close()
+            return jsonify({"error": "找不到品項"}), 404
+
+        item_dict = dict(item)
+        init_qty = item_dict.get('initial_qty') or item_dict.get('quantity') or 0
+        in_d = format_date_str(item_dict.get('in_date', ''))
+
+        status = 'completed' if actual_qty == 0 else 'active'
+        cursor.execute("""
+            UPDATE inventory 
+            SET current_qty = ?, last_audit_date = ?, auditor = ?, notes = ?, status = ?
+            WHERE id = ?
+        """, (actual_qty, audit_date, auditor, notes, status, item_id))
+
+        cursor.execute("""
+            INSERT INTO audit_logs (item_id, name, initial_qty, in_date, audit_date, actual_qty, auditor, notes, action_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            item_id, item_dict.get('name', ''), init_qty, in_d,
+            audit_date, actual_qty, auditor, notes, 'completed' if actual_qty == 0 else 'audit'
+        ))
+
+        conn.commit()
         conn.close()
-        return jsonify({"error": "找不到品項"}), 404
-
-    status = 'completed' if actual_qty == 0 else 'active'
-    cursor.execute("""
-        UPDATE inventory 
-        SET current_qty = ?, last_audit_date = ?, auditor = ?, notes = ?, status = ?
-        WHERE id = ?
-    """, (actual_qty, audit_date, auditor, notes, status, item_id))
-
-    cursor.execute("""
-        INSERT INTO audit_logs (item_id, name, initial_qty, in_date, audit_date, actual_qty, auditor, notes, action_type)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        item_id, item['name'], item['initial_qty'], format_date_str(item['in_date']),
-        audit_date, actual_qty, auditor, notes, 'completed' if actual_qty == 0 else 'audit'
-    ))
-
-    conn.commit()
-    conn.close()
-    return jsonify({"success": True})
+        return jsonify({"success": True})
+    except Exception as e:
+        print("Audit error:", e)
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/items/<int:item_id>', methods=['DELETE'])
 def delete_item(item_id):
@@ -273,7 +316,6 @@ def export_excel():
     center_align = Alignment(horizontal='center', vertical='center')
     left_align = Alignment(horizontal='left', vertical='center')
 
-    # 主標題與機構名稱
     ws.merge_cells("A1:K1")
     ws["A1"] = f"食品物資存放盤點表 ({month})"
     ws["A1"].font = title_font
@@ -299,18 +341,20 @@ def export_excel():
         c.border = thin_border
 
     for idx, row in enumerate(items, 1):
-        mfg = format_date_str(row['mfg_date']) or '-'
-        exp = format_date_str(row['exp_date']) or '-'
-        in_d = format_date_str(row['in_date']) or '-'
-        last_audit = format_date_str(row['last_audit_date']) or '-'
+        d = dict(row)
+        mfg = format_date_str(d.get('mfg_date')) or '-'
+        exp = format_date_str(d.get('exp_date')) or '-'
+        in_d = format_date_str(d.get('in_date')) or '-'
+        last_audit = format_date_str(d.get('last_audit_date')) or '-'
         
-        in_qty_str = f"{row['initial_qty']} {row['unit']}" if row['initial_qty'] is not None else "-"
-        cur_qty_str = f"{row['current_qty']} {row['unit']}" if row['current_qty'] is not None else "-"
+        init_q = d.get('initial_qty') if d.get('initial_qty') is not None else d.get('quantity', '-')
+        cur_q = d.get('current_qty') if d.get('current_qty') is not None else d.get('quantity', '-')
+        unit = d.get('unit', '')
 
         row_data = [
-            idx, row['name'] or '', in_qty_str, mfg, exp, in_d,
-            row['staff'] or '', last_audit, cur_qty_str,
-            row['auditor'] or '', row['notes'] or ''
+            idx, d.get('name', ''), f"{init_q} {unit}".strip(), mfg, exp, in_d,
+            d.get('staff', '') or '-', last_audit, f"{cur_q} {unit}".strip(),
+            d.get('auditor', '') or '-', d.get('notes', '') or '-'
         ]
         ws.append(row_data)
 
