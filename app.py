@@ -98,7 +98,6 @@ def init_db():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
-            # 自動同步歷史舊紀錄品名與入庫日
             try:
                 db.execute("""
                     UPDATE audit_logs
@@ -130,7 +129,7 @@ def init_db():
             """)
             db.execute("""
                 CREATE TABLE IF NOT EXISTS audit_logs (
-                    id SERIAL PRIMARY KEY,
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     item_id INTEGER,
                     name TEXT,
                     initial_qty INTEGER,
@@ -143,7 +142,6 @@ def init_db():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
-            # SQLite 同步歷史舊紀錄品名
             try:
                 db.execute("""
                     UPDATE audit_logs
@@ -195,6 +193,7 @@ def get_logs():
 
 @app.route('/api/logs/<int:log_id>', methods=['PUT'])
 def update_log(log_id):
+    """修改單筆盤點紀錄，並同步更新該品項的在庫庫存與狀態"""
     data = request.json or {}
     actual_qty = int(data.get('actual_qty', 0))
     audit_date = format_date_str(data.get('audit_date', ''))
@@ -203,17 +202,61 @@ def update_log(log_id):
     action_type = 'completed' if actual_qty == 0 else 'audit'
 
     with DBConn() as db:
+        cursor = db.execute("SELECT item_id FROM audit_logs WHERE id = ?", (log_id,))
+        log_entry = cursor.fetchone()
+        
         db.execute("""
             UPDATE audit_logs
             SET actual_qty = ?, audit_date = ?, auditor = ?, notes = ?, action_type = ?
             WHERE id = ?
         """, (actual_qty, audit_date, auditor, notes, action_type, log_id))
+
+        if log_entry and log_entry['item_id']:
+            item_id = log_entry['item_id']
+            # 若修改後的數量大於 0，品項恢復在庫狀態 (active)
+            status = 'completed' if actual_qty == 0 else 'active'
+            db.execute("""
+                UPDATE inventory
+                SET current_qty = ?, last_audit_date = ?, auditor = ?, notes = ?, status = ?
+                WHERE id = ?
+            """, (actual_qty, audit_date, auditor, notes, status, item_id))
+
     return jsonify({"success": True})
 
 @app.route('/api/logs/<int:log_id>', methods=['DELETE'])
 def delete_log(log_id):
+    """刪除單筆紀錄：若刪除的是已用完/盤點紀錄，自動回推該品項至前一次盤點數量或原入庫數，並重回在庫清單"""
     with DBConn() as db:
+        cursor = db.execute("SELECT item_id FROM audit_logs WHERE id = ?", (log_id,))
+        log_entry = cursor.fetchone()
+        item_id = log_entry['item_id'] if log_entry else None
+
+        # 1. 刪除該筆紀錄
         db.execute("DELETE FROM audit_logs WHERE id = ?", (log_id,))
+
+        # 2. 回推庫存狀態
+        if item_id:
+            # 尋找該品項剩餘的最新盤點紀錄
+            cursor_prev = db.execute("SELECT * FROM audit_logs WHERE item_id = ? ORDER BY id DESC LIMIT 1", (item_id,))
+            prev_log = cursor_prev.fetchone()
+
+            if prev_log:
+                prev_d = dict(prev_log)
+                prev_qty = prev_d.get('actual_qty', 0)
+                status = 'completed' if prev_qty == 0 else 'active'
+                db.execute("""
+                    UPDATE inventory
+                    SET current_qty = ?, last_audit_date = ?, auditor = ?, notes = ?, status = ?
+                    WHERE id = ?
+                """, (prev_qty, format_date_str(prev_d.get('audit_date')), prev_d.get('auditor', ''), prev_d.get('notes', ''), status, item_id))
+            else:
+                # 若已經沒有任何盤點紀錄，直接還原為「原入庫數」與「active 在庫狀態」
+                db.execute("""
+                    UPDATE inventory
+                    SET current_qty = initial_qty, last_audit_date = NULL, auditor = NULL, notes = NULL, status = 'active'
+                    WHERE id = ?
+                """, (item_id,))
+
     return jsonify({"success": True})
 
 @app.route('/api/items', methods=['POST'])
@@ -249,16 +292,15 @@ def update_item(item_id):
     in_date = format_date_str(data.get('in_date', ''))
     staff = data.get('staff', '').strip()
     notes = data.get('notes', '')
+    status = 'completed' if cur_qty == 0 else 'active'
 
     with DBConn() as db:
-        # 1. 更新主庫存表
         db.execute("""
             UPDATE inventory
-            SET name = ?, initial_qty = ?, current_qty = ?, unit = ?, mfg_date = ?, exp_date = ?, in_date = ?, staff = ?, notes = ?
+            SET name = ?, initial_qty = ?, current_qty = ?, unit = ?, mfg_date = ?, exp_date = ?, in_date = ?, staff = ?, notes = ?, status = ?
             WHERE id = ?
-        """, (name, init_qty, cur_qty, unit, mfg_date, exp_date, in_date, staff, notes, item_id))
+        """, (name, init_qty, cur_qty, unit, mfg_date, exp_date, in_date, staff, notes, status, item_id))
 
-        # 2. 同步更新過去所有盤點紀錄的品名與入庫日
         db.execute("""
             UPDATE audit_logs
             SET name = ?, in_date = ?
@@ -380,13 +422,11 @@ def export_excel():
     center_align = Alignment(horizontal='center', vertical='center')
     left_align = Alignment(horizontal='left', vertical='center')
 
-    # 第 1 列：機構全銜在最上方
     ws.merge_cells("A1:K1")
     ws["A1"] = "財團法人私立天主教中華聖母社會福利慈善事業基金會 附設嘉義縣私立隆興社區長照機構(團體家屋)"
     ws["A1"].font = org_font
     ws["A1"].alignment = center_align
 
-    # 第 2 列：盤點表主題
     ws.merge_cells("A2:K2")
     ws["A2"] = f"食品物資存放盤點表 ({month})"
     ws["A2"].font = title_font
@@ -396,7 +436,6 @@ def export_excel():
     ws.row_dimensions[2].height = 28
     ws.row_dimensions[3].height = 26
 
-    # 第 3 列：表頭
     headers = ["序號", "食品品名", "入庫數", "製造日期", "有效日期", "入庫日期", "入庫人員", "最近盤點日", "目前庫存", "盤點人", "說明備註"]
     ws.append(headers)
 
@@ -407,7 +446,6 @@ def export_excel():
         c.alignment = center_align
         c.border = thin_border
 
-    # 填入資料明細
     for idx, row in enumerate(items, 1):
         d = dict(row)
         mfg = format_date_str(d.get('mfg_date')) or '-'
@@ -418,7 +456,6 @@ def export_excel():
         item_id = d.get('id')
         init_q = d.get('initial_qty', '-')
         
-        # 僅當月盤點紀錄才帶出盤點資訊，否則顯示 '-'
         if item_id in logs_by_item:
             log_item = logs_by_item[item_id]
             last_audit = format_date_str(log_item.get('audit_date')) or '-'
