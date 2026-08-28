@@ -1,564 +1,197 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>食品物資存放盤點系統 - 隆興社區長照機構(團體家屋)</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <title>食品物資庫存管理系統</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;600;700&display=swap');
-        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f8fafc; }
-        .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
-        .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        :root {
+            --primary-color: #2E7D32;
+            --primary-light: #E8F5E9;
+            --border-color: #C8E6C9;
+            --text-color: #2E3A2F;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft JhengHei", sans-serif; }
+        body { background-color: #F4F9F4; color: var(--text-color); padding: 16px; }
+        .container { max-width: 960px; margin: 0 auto; background: #FFF; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+        h1 { font-size: 1.5rem; text-align: center; color: var(--primary-color); margin-bottom: 20px; }
+        .actions-bar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .btn { padding: 10px 18px; border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+        .btn-primary { background: var(--primary-color); color: #FFF; }
+        .btn-primary:hover { opacity: 0.9; }
+        .btn-export { background: #1B5E20; color: #FFF; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+        .btn-danger { background: #D32F2F; color: #FFF; }
+        
+        .form-card { background: var(--primary-light); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px; }
+        .form-group label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; }
+        .form-group input, .form-group select { width: 100%; padding: 8px 12px; border: 1px solid #B0BEC5; border-radius: 6px; font-size: 0.95rem; }
+        
+        .table-container { overflow-x: auto; margin-top: 10px; }
+        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem; }
+        th, td { padding: 12px; border: 1px solid #E0E0E0; }
+        th { background: var(--primary-light); color: var(--primary-color); font-weight: bold; text-align: center; }
+        td.center { text-align: center; }
+        tr:hover { background: #FAFAFA; }
     </style>
 </head>
-<body class="text-slate-700 min-h-screen pb-12">
-    <!-- 頂部導覽列 -->
-    <header class="bg-gradient-to-r from-emerald-700 to-teal-800 text-white shadow-md sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div class="flex items-center space-x-3">
-                <div class="w-10 h-10 bg-white/15 rounded-xl flex items-center justify-center backdrop-blur-md shrink-0">
-                    <i class="fa-solid fa-boxes-stacked text-xl text-emerald-200"></i>
-                </div>
-                <div>
-                    <h1 class="text-base sm:text-lg font-bold tracking-wide">食品物資存放盤點系統</h1>
-                    <p class="text-[11px] sm:text-xs text-emerald-200 opacity-90 leading-tight">
-                        財團法人私立天主教中華聖母社會福利慈善事業基金會<br class="hidden sm:inline">附設嘉義縣私立隆興社區長照機構(團體家屋)
-                    </p>
-                </div>
-            </div>
+<body>
 
-            <form action="/export" method="get" class="flex items-center bg-white/10 p-1.5 rounded-xl backdrop-blur-md border border-white/20">
-                <span class="text-xs px-2 font-medium text-emerald-100"><i class="fa-regular fa-calendar mr-1"></i> 月份</span>
-                <input type="month" name="month" value="{{ today[:7] }}" required class="bg-white text-slate-800 text-xs sm:text-sm px-3 py-1.5 rounded-lg border-0 font-medium">
-                <button type="submit" class="ml-2 bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-xs px-3.5 py-1.5 rounded-lg shadow transition flex items-center gap-1.5 cursor-pointer">
-                    <i class="fa-solid fa-file-excel text-emerald-900"></i> 匯出 Excel
-                </button>
-            </form>
-        </div>
-    </header>
+<div class="container">
+    <h1>📦 食品物資庫存管理系統</h1>
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 space-y-6">
-        <!-- 狀態統計 -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
-                <div>
-                    <p class="text-xs font-semibold text-slate-400">現存在庫品項</p>
-                    <p class="text-2xl font-black text-slate-800 mt-1">{{ items|length }} <span class="text-xs font-normal text-slate-400">項</span></p>
-                </div>
-                <div class="w-10 h-10 bg-slate-100 text-slate-600 rounded-xl flex items-center justify-center text-lg"><i class="fa-solid fa-cubes"></i></div>
-            </div>
-            <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
-                <div>
-                    <p class="text-xs font-semibold text-slate-400">本月已盤點</p>
-                    <p class="text-2xl font-black text-emerald-600 mt-1">{{ checked_count }} <span class="text-xs font-normal text-slate-400">項</span></p>
-                </div>
-                <div class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center text-lg"><i class="fa-solid fa-clipboard-check"></i></div>
-            </div>
-            <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
-                <div>
-                    <p class="text-xs font-semibold text-slate-400">30天內即期</p>
-                    <p class="text-2xl font-black text-amber-500 mt-1">{{ expiring_count }} <span class="text-xs font-normal text-slate-400">項</span></p>
-                </div>
-                <div class="w-10 h-10 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center text-lg"><i class="fa-solid fa-triangle-exclamation"></i></div>
-            </div>
-            <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
-                <div>
-                    <p class="text-xs font-semibold text-slate-400">已過期物資</p>
-                    <p class="text-2xl font-black text-rose-500 mt-1">{{ expired_count }} <span class="text-xs font-normal text-slate-400">項</span></p>
-                </div>
-                <div class="w-10 h-10 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center text-lg"><i class="fa-solid fa-circle-exclamation"></i></div>
-            </div>
-        </div>
-
-        <!-- 登記表單（全部欄位皆設為必填） -->
-        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sm:p-7">
-            <div class="border-b border-slate-100 pb-4 mb-5 flex flex-wrap items-center justify-between gap-3">
-                <div class="flex items-center gap-2.5">
-                    <span class="p-2 bg-emerald-50 text-emerald-700 rounded-lg text-sm"><i class="fa-solid fa-pen-to-square"></i></span>
-                    <h2 class="text-base font-bold text-slate-800">新增物資入庫</h2>
-                </div>
-                
-                <div class="flex items-center gap-2">
-                    <span id="aiStatus" class="hidden text-xs text-emerald-700 font-bold animate-pulse">
-                        <i class="fa-solid fa-robot mr-1"></i> AI 辨識「品牌+品名」中...
-                    </span>
-                    <label class="cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3.5 py-2 rounded-xl font-bold transition flex items-center gap-2 shadow-sm">
-                        <i class="fa-solid fa-camera text-sm"></i> 拍照自動填寫品名
-                        <input type="file" accept="image/*" capture="environment" class="hidden" onchange="uploadToBackendAI(this)">
-                    </label>
-                </div>
-            </div>
-
-            <form action="/add" method="post" class="space-y-4">
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-                    <div class="lg:col-span-2">
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">食品品名（包含品牌及名稱） <span class="text-rose-500">*</span></label>
-                        <input type="text" id="itemNameInput" name="item_name" list="food_list" required placeholder="例：桂格大燕麥片、愛之味脆瓜" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition font-medium">
-                        <datalist id="food_list">
-                            {% for di in distinct_items %}
-                            <option value="{{ di.item_name }}">
-                            {% endfor %}
-                        </datalist>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">入庫數量 <span class="text-rose-500">*</span></label>
-                        <input type="number" step="1" min="1" name="in_qty" required placeholder="整數數量" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">單位 <span class="text-rose-500">*</span></label>
-                        <input type="text" name="in_unit" required placeholder="包 / 罐 / 箱" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition">
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">製造日期 <span class="text-rose-500">*</span></label>
-                        <input type="date" name="mfg_date" max="{{ today }}" required class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition text-slate-600">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">有效日期 <span class="text-rose-500">*</span></label>
-                        <input type="date" name="exp_date" required class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition text-slate-600 font-medium">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">入庫日期 <span class="text-rose-500">*</span></label>
-                        <input type="date" name="in_date" value="{{ today }}" max="{{ today }}" required class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition text-slate-600">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">入庫人員簽章 <span class="text-rose-500">*</span></label>
-                        <input type="text" name="in_signer" required placeholder="經辦姓名" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition">
-                    </div>
-                </div>
-
-                <div class="flex justify-end pt-2">
-                    <button type="submit" class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow transition flex items-center gap-2 cursor-pointer">
-                        <i class="fa-solid fa-check"></i> 新增入庫存檔
-                    </button>
-                </div>
-            </form>
-        </div>
-
-        <!-- 1. 主區塊：現存在庫物資清單 -->
-        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-            <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                <div>
-                    <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
-                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
-                        現存在庫物資清單
-                    </h3>
-                    <p class="text-xs text-emerald-700 mt-0.5"><i class="fa-solid fa-hand-pointer mr-1"></i> 點擊<strong>「食品品名」</strong>可進行每月盤點；品名填錯可點右側<strong>「✏️ 編輯」</strong>修改</p>
-                </div>
-                <span class="text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg font-bold">在庫共 {{ items|length }} 項</span>
-            </div>
-
-            <div class="overflow-x-auto max-h-[380px] custom-scroll">
-                <table class="w-full text-left text-xs sm:text-sm">
-                    <thead class="bg-slate-50 text-slate-500 text-xs font-bold border-b border-slate-100 sticky top-0 z-10 shadow-2xs">
-                        <tr>
-                            <th class="py-3 px-4 bg-slate-50">食品品名 (點擊盤點)</th>
-                            <th class="py-3 px-3 text-center bg-slate-50">入庫數</th>
-                            <th class="py-3 px-3 bg-slate-50">製造日期</th>
-                            <th class="py-3 px-3 bg-slate-50">有效日期 / 警示</th>
-                            <th class="py-3 px-3 bg-slate-50">入庫日期</th>
-                            <th class="py-3 px-3 bg-slate-50">入庫人員</th>
-                            <th class="py-3 px-3 bg-slate-50">最近盤點日</th>
-                            <th class="py-3 px-3 text-center bg-slate-50">目前庫存</th>
-                            <th class="py-3 px-3 bg-slate-50">盤點人</th>
-                            <th class="py-3 px-4 bg-slate-50">說明備註</th>
-                            <th class="py-3 px-4 text-center bg-slate-50">操作</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100 text-slate-700">
-                        {% for item in items %}
-                        <tr class="hover:bg-emerald-50/40 transition">
-                            <td class="py-3.5 px-4 font-semibold">
-                                <button type="button" 
-                                    onclick="openCheckModal({{ item.id }}, '{{ item.item_name }}', '{{ item.in_unit }}', '{{ item.last_check_date or today }}', '{{ item.current_stock if item.current_stock is not none else item.in_qty }}', '{{ item.last_check_signer or '' }}', '{{ item.last_remark or '' }}')"
-                                    class="text-emerald-700 hover:text-emerald-900 hover:underline flex items-center gap-1.5 text-left font-bold cursor-pointer">
-                                    <i class="fa-solid fa-clipboard-check text-xs opacity-60"></i> {{ item.item_name }}
-                                </button>
-                            </td>
-                            <td class="py-3.5 px-3 text-center font-medium">{{ item.in_qty }} <span class="text-xs text-slate-400">{{ item.in_unit }}</span></td>
-                            <td class="py-3.5 px-3 text-slate-600 font-medium">{{ item.mfg_date or '-' }}</td>
-                            <td class="py-3.5 px-3">
-                                {% if item.exp_date %}
-                                    <div class="font-medium {% if item.is_expired %}text-rose-600{% elif item.is_expiring %}text-amber-600{% else %}text-slate-600{% endif %}">
-                                        {{ item.exp_date }}
-                                    </div>
-                                    {% if item.is_expired %}
-                                        <span class="inline-block mt-0.5 px-1.5 py-0.2 bg-rose-50 text-rose-600 border border-rose-200 rounded text-[10px] font-bold">已過期</span>
-                                    {% elif item.is_expiring %}
-                                        <span class="inline-block mt-0.5 px-1.5 py-0.2 bg-amber-50 text-amber-600 border border-amber-200 rounded text-[10px] font-bold">即期品</span>
-                                    {% endif %}
-                                {% else %}-{% endif %}
-                            </td>
-                            <td class="py-3.5 px-3 text-slate-500">{{ item.in_date }}</td>
-                            <td class="py-3.5 px-3 text-slate-600 font-medium">{{ item.in_signer }}</td>
-                            <td class="py-3.5 px-3 text-slate-500">{{ item.last_check_date or '-' }}</td>
-                            <td class="py-3.5 px-3 text-center font-bold text-emerald-700">
-                                {{ item.current_stock if item.current_stock is not none else item.in_qty }} {{ item.in_unit }}
-                            </td>
-                            <td class="py-3.5 px-3 text-slate-600">{{ item.last_check_signer or '-' }}</td>
-                            <td class="py-3.5 px-4 text-slate-500">
-                                {% if item.last_remark %}<span class="px-2 py-0.5 bg-slate-100 rounded text-xs">{{ item.last_remark }}</span>{% else %}-{% endif %}
-                            </td>
-                            <td class="py-3.5 px-4 text-center">
-                                <div class="flex items-center justify-center gap-2">
-                                    <button type="button" 
-                                        onclick="openEditModal({{ item.id }}, '{{ item.item_name }}', {{ item.in_qty }}, '{{ item.in_unit }}', '{{ item.mfg_date or '' }}', '{{ item.exp_date or '' }}', '{{ item.in_date }}', '{{ item.in_signer }}')"
-                                        class="text-indigo-600 hover:text-indigo-800 p-1 rounded-md transition cursor-pointer" title="修改品名或入庫資訊">
-                                        <i class="fa-solid fa-pen-to-square"></i>
-                                    </button>
-                                    <form action="/delete/{{ item.id }}" method="post" onsubmit="return confirm('確定要刪除「{{ item.item_name }}」這筆物資嗎？');">
-                                        <button type="submit" class="text-rose-500 hover:text-rose-700 p-1 rounded-md transition cursor-pointer" title="刪除此紀錄">
-                                            <i class="fa-solid fa-trash-can"></i>
-                                        </button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="11" class="py-6 text-center text-slate-400 text-xs">目前無在庫物資</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- 2. 分頁標籤切換區：歷史盤點紀錄 & 已用完紀錄 -->
-        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-            <div class="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 pt-3">
-                <div class="flex space-x-2">
-                    <button type="button" onclick="switchTab('checkedTab')" id="btnCheckedTab" class="px-4 py-2.5 text-xs font-bold rounded-t-xl border-b-2 border-emerald-600 text-emerald-700 bg-white transition flex items-center gap-2 cursor-pointer shadow-2xs">
-                        <i class="fa-solid fa-clipboard-list"></i> 過去盤點紀錄 ({{ checked_items|length }})
-                    </button>
-                    <button type="button" onclick="switchTab('finishedTab')" id="btnFinishedTab" class="px-4 py-2.5 text-xs font-bold rounded-t-xl border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition flex items-center gap-2 cursor-pointer">
-                        <i class="fa-solid fa-box-open"></i> 已用完/消耗紀錄 ({{ finished_items|length }})
-                    </button>
-                </div>
-                <span class="text-[11px] text-slate-400 hidden sm:inline">每次盤點皆獨立永久存檔</span>
-            </div>
-
-            <!-- Tab 1: 過去正常盤點紀錄清單 -->
-            <div id="checkedTab" class="overflow-x-auto max-h-[300px] custom-scroll">
-                <table class="w-full text-left text-xs sm:text-sm">
-                    <thead class="bg-slate-50 text-slate-500 text-xs font-bold border-b border-slate-100 sticky top-0 z-10">
-                        <tr>
-                            <th class="py-2.5 px-4 bg-slate-50">食品品名</th>
-                            <th class="py-2.5 px-3 text-center bg-slate-50">原入庫數</th>
-                            <th class="py-2.5 px-3 bg-slate-50">入庫日期</th>
-                            <th class="py-2.5 px-3 bg-slate-50">盤點日期</th>
-                            <th class="py-2.5 px-3 text-center bg-slate-50">盤點實存</th>
-                            <th class="py-2.5 px-3 bg-slate-50">盤點人員</th>
-                            <th class="py-2.5 px-4 bg-slate-50">說明備註</th>
-                            <th class="py-2.5 px-4 text-center bg-slate-50">操作</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100 text-slate-600">
-                        {% for c in checked_items %}
-                        <tr class="hover:bg-slate-50/80 transition">
-                            <td class="py-2.5 px-4 font-semibold text-slate-700">{{ c.item_name }}</td>
-                            <td class="py-2.5 px-3 text-center">{{ c.in_qty }} <span class="text-xs text-slate-400">{{ c.in_unit }}</span></td>
-                            <td class="py-2.5 px-3 text-slate-500">{{ c.in_date }}</td>
-                            <td class="py-2.5 px-3 font-medium text-slate-700">{{ c.check_date }}</td>
-                            <td class="py-2.5 px-3 text-center font-bold text-emerald-700">{{ c.check_qty }} {{ c.in_unit }}</td>
-                            <td class="py-2.5 px-3 text-slate-600">{{ c.check_signer }}</td>
-                            <td class="py-2.5 px-4"><span class="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-xs">{{ c.remark or '正常' }}</span></td>
-                            <td class="py-2.5 px-4 text-center">
-                                <form action="/delete_log/{{ c.id }}" method="post" onsubmit="return confirm('確定要刪除這筆歷史盤點紀錄嗎？');">
-                                    <button type="submit" class="text-rose-400 hover:text-rose-600 p-1 rounded-md transition cursor-pointer" title="刪除此紀錄">
-                                        <i class="fa-solid fa-trash-can text-xs"></i>
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="8" class="py-6 text-center text-slate-400 text-xs">尚無盤點紀錄</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Tab 2: 已用完／消耗紀錄清單 -->
-            <div id="finishedTab" class="hidden overflow-x-auto max-h-[300px] custom-scroll">
-                <table class="w-full text-left text-xs sm:text-sm">
-                    <thead class="bg-rose-50/60 text-slate-500 text-xs font-bold border-b border-rose-100 sticky top-0 z-10">
-                        <tr>
-                            <th class="py-2.5 px-4 bg-rose-50/90">食品品名</th>
-                            <th class="py-2.5 px-3 text-center bg-rose-50/90">原入庫數</th>
-                            <th class="py-2.5 px-3 bg-rose-50/90">入庫日期</th>
-                            <th class="py-2.5 px-3 bg-rose-50/90">用完日期</th>
-                            <th class="py-2.5 px-3 text-center bg-rose-50/90">實存數</th>
-                            <th class="py-2.5 px-3 bg-rose-50/90">經辦/盤點人</th>
-                            <th class="py-2.5 px-4 bg-rose-50/90">處置情形</th>
-                            <th class="py-2.5 px-4 text-center bg-rose-50/90">操作</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-rose-100/60 text-slate-600">
-                        {% for f in finished_items %}
-                        <tr class="hover:bg-rose-50/30 transition">
-                            <td class="py-2.5 px-4 font-semibold text-slate-700">{{ f.item_name }}</td>
-                            <td class="py-2.5 px-3 text-center text-slate-400">{{ f.in_qty }} <span class="text-xs">{{ f.in_unit }}</span></td>
-                            <td class="py-2.5 px-3 text-slate-400">{{ f.in_date }}</td>
-                            <td class="py-2.5 px-3 font-medium text-slate-700">{{ f.check_date }}</td>
-                            <td class="py-2.5 px-3 text-center font-bold text-rose-500">0 {{ f.in_unit }}</td>
-                            <td class="py-2.5 px-3 text-slate-600">{{ f.check_signer }}</td>
-                            <td class="py-2.5 px-4"><span class="px-2 py-0.5 bg-rose-100 text-rose-700 rounded text-xs font-semibold">{{ f.remark or '已用完' }}</span></td>
-                            <td class="py-2.5 px-4 text-center">
-                                <form action="/delete_log/{{ f.id }}" method="post" onsubmit="return confirm('確定要刪除這筆用完紀錄嗎？');">
-                                    <button type="submit" class="text-rose-400 hover:text-rose-600 p-1 rounded-md transition cursor-pointer" title="刪除此紀錄">
-                                        <i class="fa-solid fa-trash-can text-xs"></i>
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="8" class="py-6 text-center text-slate-400 text-xs">目前沒有已用完的品項紀錄</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </main>
-
-    <!-- 1. 修改入庫資訊彈出視窗 (Edit Modal) -->
-    <div id="editModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-        <div class="bg-white w-full max-w-lg rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div class="bg-indigo-700 text-white px-5 py-4 flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                    <i class="fa-solid fa-pen-to-square text-indigo-200"></i>
-                    <h3 class="font-bold text-base">修改入庫食品資料</h3>
-                </div>
-                <button type="button" onclick="closeEditModal()" class="text-white/80 hover:text-white text-lg cursor-pointer">&times;</button>
-            </div>
-            
-            <form id="editForm" method="post" class="p-5 space-y-4">
-                <div>
-                    <label class="block text-xs font-semibold text-slate-600 mb-1">食品品名（包含品牌及名稱） <span class="text-rose-500">*</span></label>
-                    <input type="text" id="editItemName" name="item_name" required class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition font-bold text-slate-800">
-                </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">入庫數量 <span class="text-rose-500">*</span></label>
-                        <input type="number" step="1" min="1" id="editInQty" name="in_qty" required class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">單位 <span class="text-rose-500">*</span></label>
-                        <input type="text" id="editInUnit" name="in_unit" required class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
-                    </div>
-                </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">製造日期 <span class="text-rose-500">*</span></label>
-                        <input type="date" id="editMfgDate" name="mfg_date" max="{{ today }}" required class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition text-slate-600">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">有效日期 <span class="text-rose-500">*</span></label>
-                        <input type="date" id="editExpDate" name="exp_date" required class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition text-slate-600 font-medium">
-                    </div>
-                </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">入庫日期 <span class="text-rose-500">*</span></label>
-                        <input type="date" id="editInDate" name="in_date" max="{{ today }}" required class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition text-slate-600">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">入庫人員簽章 <span class="text-rose-500">*</span></label>
-                        <input type="text" id="editInSigner" name="in_signer" required class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
-                    </div>
-                </div>
-
-                <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                    <button type="button" onclick="closeEditModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs rounded-xl transition cursor-pointer">取消</button>
-                    <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow transition cursor-pointer">確認更新資料</button>
-                </div>
-            </form>
-        </div>
+    <div class="actions-bar">
+        <a href="/export" class="btn btn-export">📥 匯出當月盤點表 (Excel)</a>
     </div>
 
-    <!-- 2. 每月盤點彈出視窗 (Check Modal) -->
-    <div id="checkModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-        <div class="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div class="bg-emerald-700 text-white px-5 py-4 flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                    <i class="fa-solid fa-clipboard-check text-emerald-200"></i>
-                    <h3 class="font-bold text-base" id="modalItemTitle">每月盤點登錄</h3>
-                </div>
-                <button type="button" onclick="closeCheckModal()" class="text-white/80 hover:text-white text-lg cursor-pointer">&times;</button>
+    <div class="form-card">
+        <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--primary-color);">➕ 新增 / 編輯品項</h3>
+        <div class="form-grid">
+            <div class="form-group">
+                <label>食品名稱 *</label>
+                <input type="text" id="foodName" placeholder="如：桂格大燕麥片">
             </div>
-            
-            <form id="checkForm" method="post" onsubmit="return validateCheckForm()" class="p-5 space-y-4">
-                <div>
-                    <label class="block text-xs font-semibold text-slate-600 mb-1">盤點日期 <span class="text-rose-500">* (不可選未來日期)</span></label>
-                    <input type="date" id="modalCheckDate" name="check_date" max="{{ today }}" required class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-600 mb-1">盤點實存數量 <span class="text-rose-500">* (填 0 即用完歸檔)</span></label>
-                    <div class="flex items-center gap-2">
-                        <input type="number" step="1" min="0" id="modalCheckQty" name="check_qty" required oninput="checkZeroRequirement()" placeholder="整數數量" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition font-bold text-slate-800">
-                        <span id="modalUnit" class="text-sm font-semibold text-slate-500 whitespace-nowrap">單位</span>
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-600 mb-1">盤點人員簽章 <span class="text-rose-500">*</span></label>
-                    <input type="text" id="modalCheckSigner" name="check_signer" required placeholder="盤點員姓名" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-600 mb-1 flex items-center justify-between">
-                        <span>說明 / 處置情形 <span id="remarkRequiredStar" class="text-rose-500 hidden">* (庫存0必填)</span></span>
-                        <span id="remarkHint" class="text-[11px] text-rose-500 hidden font-bold">庫存為0時必須填寫說明</span>
-                    </label>
-                    <input type="text" id="modalRemark" name="remark" placeholder="如：已食用完畢 / 逾期報廢丟棄" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition">
-                </div>
-
-                <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                    <button type="button" onclick="closeCheckModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs rounded-xl transition cursor-pointer">取消</button>
-                    <button type="submit" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition cursor-pointer">確認儲存盤點</button>
-                </div>
-            </form>
+            <div class="form-group">
+                <label>類別</label>
+                <input type="text" id="foodCategory" placeholder="如：穀物 / 罐頭">
+            </div>
+            <div class="form-group">
+                <label>製造日期</label>
+                <input type="date" id="mfgDate">
+            </div>
+            <div class="form-group">
+                <label>有效日期</label>
+                <input type="date" id="expDate">
+            </div>
+            <div class="form-group">
+                <label>入庫日期</label>
+                <input type="date" id="inDate">
+            </div>
+            <div class="form-group">
+                <label>數量</label>
+                <input type="number" id="quantity" value="1" min="1">
+            </div>
+            <div class="form-group">
+                <label>單位</label>
+                <input type="text" id="unit" value="罐">
+            </div>
+            <div class="form-group">
+                <label>備註</label>
+                <input type="text" id="notes" placeholder="備註說明">
+            </div>
         </div>
+        <button class="btn btn-primary" onclick="saveItem()">儲存物資資料</button>
     </div>
 
-    <script>
-        const TODAY_STR = "{{ today }}";
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 50px;">序號</th>
+                    <th>食品名稱</th>
+                    <th>類別</th>
+                    <th style="width: 110px;">製造日期</th>
+                    <th style="width: 110px;">有效日期</th>
+                    <th style="width: 110px;">入庫日期</th>
+                    <th style="width: 80px;">數量</th>
+                    <th>備註</th>
+                    <th style="width: 70px;">操作</th>
+                </tr>
+            </thead>
+            <tbody id="inventoryTableBody">
+                <!-- 動態載入 -->
+            </tbody>
+        </table>
+    </div>
+</div>
 
-        function openEditModal(id, itemName, inQty, inUnit, mfgDate, expDate, inDate, inSigner) {
-            document.getElementById('editForm').action = '/edit_item/' + id;
-            document.getElementById('editItemName').value = itemName;
-            document.getElementById('editInQty').value = inQty;
-            document.getElementById('editInUnit').value = inUnit;
-            document.getElementById('editMfgDate').value = mfgDate;
-            document.getElementById('editExpDate').value = expDate;
-            document.getElementById('editInDate').value = inDate;
-            document.getElementById('editInSigner').value = inSigner;
-            document.getElementById('editModal').classList.remove('hidden');
+<script>
+    // 嚴格過濾日期格式為 YYYY-MM-DD
+    function cleanDate(val) {
+        if (!val) return '';
+        const s = String(val).trim();
+        if (s.indexOf('T') !== -1) return s.split('T')[0];
+        if (s.length >= 10 && s[4] === '-' && s[7] === '-') return s.substring(0, 10);
+        return s;
+    }
+
+    // 載入資料
+    async function loadItems() {
+        const res = await fetch('/api/items');
+        const items = await res.json();
+        const tbody = document.getElementById('inventoryTableBody');
+        tbody.innerHTML = '';
+
+        items.forEach((item, index) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="center">${index + 1}</td>
+                <td><strong>${item.name || ''}</strong></td>
+                <td class="center">${item.category || ''}</td>
+                <td class="center">${cleanDate(item.mfg_date)}</td>
+                <td class="center">${cleanDate(item.exp_date)}</td>
+                <td class="center">${cleanDate(item.in_date)}</td>
+                <td class="center">${item.quantity || 1} ${item.unit || ''}</td>
+                <td>${item.notes || ''}</td>
+                <td class="center">
+                    <button class="btn btn-danger" style="padding: 4px 8px; font-size: 0.8rem;" onclick="deleteItem(${item.id})">刪除</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // 儲存資料（確保送出乾淨的 YYYY-MM-DD 格式）
+    async function saveItem() {
+        const name = document.getElementById('foodName').value.trim();
+        if (!name) {
+            alert('請輸入食品名稱！');
+            return;
         }
 
-        function closeEditModal() {
-            document.getElementById('editModal').classList.add('hidden');
+        const payload = {
+            name: name,
+            category: document.getElementById('foodCategory').value.trim(),
+            mfg_date: cleanDate(document.getElementById('mfgDate').value),
+            exp_date: cleanDate(document.getElementById('expDate').value),
+            in_date: cleanDate(document.getElementById('inDate').value) || cleanDate(new Date().toISOString().split('T')[0]),
+            quantity: parseInt(document.getElementById('quantity').value) || 1,
+            unit: document.getElementById('unit').value.trim() || '個',
+            notes: document.getElementById('notes').value.trim()
+        };
+
+        const res = await fetch('/api/items', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            // 清空表單
+            document.getElementById('foodName').value = '';
+            document.getElementById('foodCategory').value = '';
+            document.getElementById('mfgDate').value = '';
+            document.getElementById('expDate').value = '';
+            document.getElementById('notes').value = '';
+            loadItems();
+        } else {
+            alert('儲存失敗，請重試！');
         }
+    }
 
-        function checkZeroRequirement() {
-            const qty = parseInt(document.getElementById('modalCheckQty').value);
-            const remarkInput = document.getElementById('modalRemark');
-            const star = document.getElementById('remarkRequiredStar');
-            const hint = document.getElementById('remarkHint');
+    // 刪除品項
+    async function deleteItem(id) {
+        if (!confirm('確定要刪除此筆物資資料嗎？')) return;
+        const res = await fetch(`/api/items/${id}`, { method: 'DELETE' });
+        if (res.ok) loadItems();
+    }
 
-            if (qty === 0) {
-                remarkInput.required = true;
-                star.classList.remove('hidden');
-                hint.classList.remove('hidden');
-                remarkInput.classList.add('border-rose-400', 'bg-rose-50/30');
-                if (!remarkInput.value.trim()) {
-                    remarkInput.placeholder = "庫存為0，請務必填寫說明（例：已用完、過期丟棄）";
-                }
-            } else {
-                remarkInput.required = false;
-                star.classList.add('hidden');
-                hint.classList.add('hidden');
-                remarkInput.classList.remove('border-rose-400', 'bg-rose-50/30');
-                remarkInput.placeholder = "正常 / 已用完 / 過期已丟棄";
-            }
-        }
-
-        function validateCheckForm() {
-            const checkDate = document.getElementById('modalCheckDate').value;
-            if (checkDate > TODAY_STR) {
-                alert('⚠️ 盤點日期不能大於今天（不能是未來日期）！');
-                document.getElementById('modalCheckDate').focus();
-                return false;
-            }
-
-            const qty = parseInt(document.getElementById('modalCheckQty').value);
-            const remark = document.getElementById('modalRemark').value.trim();
-            if (qty === 0 && remark.length === 0) {
-                alert('⚠️ 盤點庫存為 0 時，必須填寫「說明 / 處置情形」（例如：已用完、逾期報廢）！');
-                document.getElementById('modalRemark').focus();
-                return false;
-            }
-            return true;
-        }
-
-        function switchTab(tabId) {
-            const checkedTab = document.getElementById('checkedTab');
-            const finishedTab = document.getElementById('finishedTab');
-            const btnChecked = document.getElementById('btnCheckedTab');
-            const btnFinished = document.getElementById('btnFinishedTab');
-
-            if (tabId === 'checkedTab') {
-                checkedTab.classList.remove('hidden');
-                finishedTab.classList.add('hidden');
-                btnChecked.className = 'px-4 py-2.5 text-xs font-bold rounded-t-xl border-b-2 border-emerald-600 text-emerald-700 bg-white transition flex items-center gap-2 cursor-pointer shadow-2xs';
-                btnFinished.className = 'px-4 py-2.5 text-xs font-bold rounded-t-xl border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition flex items-center gap-2 cursor-pointer';
-            } else {
-                checkedTab.classList.add('hidden');
-                finishedTab.classList.remove('hidden');
-                btnFinished.className = 'px-4 py-2.5 text-xs font-bold rounded-t-xl border-b-2 border-rose-600 text-rose-700 bg-white transition flex items-center gap-2 cursor-pointer shadow-2xs';
-                btnChecked.className = 'px-4 py-2.5 text-xs font-bold rounded-t-xl border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition flex items-center gap-2 cursor-pointer';
-            }
-        }
-
-        function openCheckModal(id, itemName, unit, checkDate, checkQty, checkSigner, remark) {
-            document.getElementById('checkForm').action = '/update_check/' + id;
-            document.getElementById('modalItemTitle').innerText = '盤點：' + itemName;
-            document.getElementById('modalUnit').innerText = unit;
-            
-            let initDate = checkDate || TODAY_STR;
-            if (initDate > TODAY_STR) initDate = TODAY_STR;
-            
-            const dateInput = document.getElementById('modalCheckDate');
-            dateInput.value = initDate;
-            dateInput.max = TODAY_STR;
-            
-            document.getElementById('modalCheckQty').value = Math.round(parseFloat(checkQty) || 0);
-            document.getElementById('modalCheckSigner').value = checkSigner;
-            document.getElementById('modalRemark').value = remark;
-            
-            checkZeroRequirement();
-            document.getElementById('checkModal').classList.remove('hidden');
-        }
-
-        function closeCheckModal() {
-            document.getElementById('checkModal').classList.add('hidden');
-        }
-
-        async function uploadToBackendAI(input) {
-            if (!input.files || input.files.length === 0) return;
-            const file = input.files[0];
-            const statusEl = document.getElementById('aiStatus');
-            if (statusEl) statusEl.classList.remove('hidden');
-
-            const formData = new FormData();
-            formData.append('image', file);
-
-            try {
-                const response = await fetch('/recognize_item', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-                
-                if (data.item_name && data.item_name.trim().length > 0) {
-                    const inputEl = document.getElementById('itemNameInput');
-                    inputEl.value = data.item_name.trim();
-                    inputEl.focus();
-                } else {
-                    alert('辨識遇到問題：' + (data.error || '未能辨識'));
-                }
-            } catch (err) {
-                alert('伺服器連線失敗，請確認網路連線。');
-            } finally {
-                if (statusEl) statusEl.classList.add('hidden');
-                input.value = '';
-            }
-        }
-    </script>
+    // 頁面初始化
+    document.addEventListener('DOMContentLoaded', () => {
+        // 預設入庫日期為今天
+        document.getElementById('inDate').value = new Date().toISOString().split('T')[0];
+        loadItems();
+    });
+</script>
 </body>
 </html>
