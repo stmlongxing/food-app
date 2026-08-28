@@ -193,7 +193,6 @@ def get_logs():
 
 @app.route('/api/logs/<int:log_id>', methods=['PUT'])
 def update_log(log_id):
-    """修改單筆盤點紀錄，並同步更新該品項的在庫庫存與狀態"""
     data = request.json or {}
     actual_qty = int(data.get('actual_qty', 0))
     audit_date = format_date_str(data.get('audit_date', ''))
@@ -213,7 +212,6 @@ def update_log(log_id):
 
         if log_entry and log_entry['item_id']:
             item_id = log_entry['item_id']
-            # 若修改後的數量大於 0，品項恢復在庫狀態 (active)
             status = 'completed' if actual_qty == 0 else 'active'
             db.execute("""
                 UPDATE inventory
@@ -225,18 +223,14 @@ def update_log(log_id):
 
 @app.route('/api/logs/<int:log_id>', methods=['DELETE'])
 def delete_log(log_id):
-    """刪除單筆紀錄：若刪除的是已用完/盤點紀錄，自動回推該品項至前一次盤點數量或原入庫數，並重回在庫清單"""
     with DBConn() as db:
         cursor = db.execute("SELECT item_id FROM audit_logs WHERE id = ?", (log_id,))
         log_entry = cursor.fetchone()
         item_id = log_entry['item_id'] if log_entry else None
 
-        # 1. 刪除該筆紀錄
         db.execute("DELETE FROM audit_logs WHERE id = ?", (log_id,))
 
-        # 2. 回推庫存狀態
         if item_id:
-            # 尋找該品項剩餘的最新盤點紀錄
             cursor_prev = db.execute("SELECT * FROM audit_logs WHERE item_id = ? ORDER BY id DESC LIMIT 1", (item_id,))
             prev_log = cursor_prev.fetchone()
 
@@ -250,7 +244,6 @@ def delete_log(log_id):
                     WHERE id = ?
                 """, (prev_qty, format_date_str(prev_d.get('audit_date')), prev_d.get('auditor', ''), prev_d.get('notes', ''), status, item_id))
             else:
-                # 若已經沒有任何盤點紀錄，直接還原為「原入庫數」與「active 在庫狀態」
                 db.execute("""
                     UPDATE inventory
                     SET current_qty = initial_qty, last_audit_date = NULL, auditor = NULL, notes = NULL, status = 'active'
@@ -394,8 +387,11 @@ def export_excel():
     month = request.args.get('month', datetime.now().strftime("%Y-%m"))
     
     with DBConn() as db:
-        cursor = db.execute("SELECT * FROM inventory WHERE status = 'active' OR current_qty > 0 ORDER BY id ASC")
-        items = cursor.fetchall()
+        # 取出所有品項（包含目前數量為 0 的品項，不予排除）
+        cursor = db.execute("SELECT * FROM inventory ORDER BY id ASC")
+        all_items = cursor.fetchall()
+        
+        # 取出該月份的所有盤點紀錄
         cursor_logs = db.execute("SELECT * FROM audit_logs WHERE audit_date LIKE ? ORDER BY id DESC", (f"{month}%",))
         month_logs = cursor_logs.fetchall()
 
@@ -404,6 +400,21 @@ def export_excel():
         i_id = log['item_id']
         if i_id not in logs_by_item:
             logs_by_item[i_id] = log
+
+    # 篩選要在該月份 Excel 出現的品項：
+    # 1. 該月有進行過盤點（包含盤點為 0）
+    # 2. 或入庫日期在該月（含）之前，且截至該月未過濾掉
+    export_rows = []
+    for item in all_items:
+        d = dict(item)
+        item_id = d.get('id')
+        in_date_str = format_date_str(d.get('in_date'))
+        
+        # 若該月有盤點紀錄，直接加入
+        if item_id in logs_by_item:
+            export_rows.append(d)
+        elif in_date_str and in_date_str[:7] <= month:
+            export_rows.append(d)
 
     wb = Workbook()
     ws = wb.active
@@ -422,11 +433,13 @@ def export_excel():
     center_align = Alignment(horizontal='center', vertical='center')
     left_align = Alignment(horizontal='left', vertical='center')
 
+    # 第 1 列：機構全銜在最上方
     ws.merge_cells("A1:K1")
     ws["A1"] = "財團法人私立天主教中華聖母社會福利慈善事業基金會 附設嘉義縣私立隆興社區長照機構(團體家屋)"
     ws["A1"].font = org_font
     ws["A1"].alignment = center_align
 
+    # 第 2 列：盤點表主題
     ws.merge_cells("A2:K2")
     ws["A2"] = f"食品物資存放盤點表 ({month})"
     ws["A2"].font = title_font
@@ -436,6 +449,7 @@ def export_excel():
     ws.row_dimensions[2].height = 28
     ws.row_dimensions[3].height = 26
 
+    # 第 3 列：表頭
     headers = ["序號", "食品品名", "入庫數", "製造日期", "有效日期", "入庫日期", "入庫人員", "最近盤點日", "目前庫存", "盤點人", "說明備註"]
     ws.append(headers)
 
@@ -446,8 +460,8 @@ def export_excel():
         c.alignment = center_align
         c.border = thin_border
 
-    for idx, row in enumerate(items, 1):
-        d = dict(row)
+    # 填入明細資料
+    for idx, d in enumerate(export_rows, 1):
         mfg = format_date_str(d.get('mfg_date')) or '-'
         exp = format_date_str(d.get('exp_date')) or '-'
         in_d = format_date_str(d.get('in_date')) or '-'
@@ -456,15 +470,18 @@ def export_excel():
         item_id = d.get('id')
         init_q = d.get('initial_qty', '-')
         
+        # 該月有盤點紀錄：帶出該月的盤點實存數（即使為 0 罐也會清楚列出）
         if item_id in logs_by_item:
             log_item = logs_by_item[item_id]
             last_audit = format_date_str(log_item.get('audit_date')) or '-'
-            cur_q = f"{log_item.get('actual_qty', 0)} {unit}".strip()
+            actual_q = log_item.get('actual_qty', 0)
+            cur_q = f"{actual_q} {unit}".strip()
             auditor = log_item.get('auditor', '') or '-'
             notes = log_item.get('notes', '') or '-'
         else:
+            # 該月尚未進行盤點
             last_audit = '-'
-            cur_q = f"{d.get('current_qty', '-')} {unit}".strip()
+            cur_q = f"{d.get('current_qty', 0)} {unit}".strip()
             auditor = '-'
             notes = '-'
 
